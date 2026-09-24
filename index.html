@@ -63,14 +63,21 @@
     </div>
 
     <!-- MODAL CAMBIAR PIN -->
-    <div id="modalCambiarPin" class="hidden modal-apple-backdrop">
+    <div id="modalCambiarPin" class="hidden modal-apple-backdrop" onclick="if(event.target===this)cerrarModalCambiarPin()">
         <div class="modal-apple-card p-6 w-full max-w-xs text-center">
-            <h3 class="font-bold text-base text-white mb-4">🔐 Cambiar mi PIN</h3>
+            <div class="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center mx-auto mb-3 text-2xl shadow-inner">
+                🔐
+            </div>
+            <h3 class="font-bold text-base text-white mb-1">Cambiar mi PIN</h3>
+            <p id="lblCambiarPinUsuario" class="text-[11px] text-slate-400 mb-4">Ingrese su nuevo PIN de 4 dígitos</p>
             <form onsubmit="guardarNuevoPin(event)" class="space-y-4">
-                <input type="password" id="nuevoPinInput" required pattern="[0-9]{4}" maxlength="4" placeholder="••••" class="input-apple text-center text-2xl font-mono tracking-widest bg-slate-950/70">
-                <div class="flex gap-2">
-                    <button type="button" onclick="document.getElementById('modalCambiarPin').classList.add('hidden')" class="btn-apple btn-apple-secondary flex-1 py-2 text-xs">Cancelar</button>
-                    <button type="submit" class="btn-apple btn-apple-primary flex-1 py-2 text-xs">Guardar</button>
+                <div class="space-y-1">
+                    <input type="password" id="nuevoPinInput" required pattern="[0-9]{4}" maxlength="4" inputmode="numeric" autocomplete="new-password" placeholder="••••" class="input-apple text-center text-2xl font-mono tracking-[0.5em] bg-slate-950/70 py-3">
+                    <p class="text-[10px] text-slate-500">Exactamente 4 números</p>
+                </div>
+                <div class="flex gap-2 pt-1">
+                    <button type="button" onclick="cerrarModalCambiarPin()" class="btn-apple btn-apple-secondary flex-1 py-2 text-xs">Cancelar</button>
+                    <button type="submit" id="btnGuardarPin" class="btn-apple btn-apple-primary flex-1 py-2 text-xs font-semibold">Guardar</button>
                 </div>
             </form>
         </div>
@@ -206,7 +213,9 @@
                 <p id="lblUsuarioDesktop" class="text-[11px] text-slate-300 font-medium capitalize"></p>
             </div>
             <div class="mt-2 flex items-center justify-center gap-2">
-                <button onclick="document.getElementById('modalCambiarPin').classList.remove('hidden')" class="text-[10px] text-slate-400 hover:text-teal-300 transition-colors">Cambiar PIN</button>
+                <button type="button" onclick="abrirModalCambiarPin()" class="text-[11px] text-slate-400 hover:text-teal-300 transition-colors inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg hover:bg-white/[0.04]">
+                    <span>🔐</span> <span>Cambiar PIN</span>
+                </button>
             </div>
             <button onclick="verAlertasStockMinimo()" class="hidden mt-2 mx-auto flex items-center gap-1.5 badge-apple badge-amber text-[10px]" id="btnStockMinimo">
                 <span>📦 Stock bajo mínimo:</span>

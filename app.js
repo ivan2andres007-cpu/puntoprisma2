@@ -283,11 +283,110 @@ function iniciarSesionExitoso() {
 }
 
 function cerrarSesion() {
+    cerrarModalCambiarPin();
     usuarioActual = null;
     sessionStorage.removeItem('prismaSession');
     document.getElementById('modalBloqueo').classList.add('hidden');
     document.getElementById('modalLogin').classList.remove('hidden');
     document.querySelectorAll('.seccion').forEach(s => s.classList.remove('activa'));
+}
+
+function abrirModalCambiarPin() {
+    if (!usuarioActual) {
+        return mostrarAlerta("❌ Debe iniciar sesión para cambiar el PIN", "error");
+    }
+    const input = document.getElementById('nuevoPinInput');
+    if (input) input.value = '';
+    const lbl = document.getElementById('lblCambiarPinUsuario');
+    if (lbl) {
+        lbl.innerText = `Cambiando PIN para: ${usuarioActual.nombre || 'Usuario actual'} (${usuarioActual.rol || ''})`;
+    }
+    const modal = document.getElementById('modalCambiarPin');
+    if (modal) modal.classList.remove('hidden');
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && !sidebar.classList.contains('-translate-x-full') && window.innerWidth < 768) {
+        sidebar.classList.add('-translate-x-full');
+    }
+    setTimeout(() => { if (input) input.focus(); }, 100);
+}
+
+function cerrarModalCambiarPin() {
+    const input = document.getElementById('nuevoPinInput');
+    if (input) input.value = '';
+    const modal = document.getElementById('modalCambiarPin');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function guardarNuevoPin(e) {
+    if (e) e.preventDefault();
+    if (!usuarioActual) {
+        cerrarModalCambiarPin();
+        return mostrarAlerta("❌ Debe iniciar sesión para cambiar el PIN", "error");
+    }
+    const input = document.getElementById('nuevoPinInput');
+    const nuevoPin = (input?.value || '').trim();
+
+    if (!/^\d{4}$/.test(nuevoPin)) {
+        return mostrarAlerta("❌ El PIN debe tener exactamente 4 dígitos numéricos", "error");
+    }
+
+    const esMaster = !!(usuarioActual.isMaster || usuarioActual.id === 'master');
+
+    if (!esMaster && nuevoPin === '0000') {
+        return mostrarAlerta("❌ El PIN 0000 está reservado para la Gerencia Master", "error");
+    }
+    if (usuarioActual.rol !== 'informatico' && nuevoPin === '6988') {
+        return mostrarAlerta("❌ El PIN 6988 está reservado para el Informático", "error");
+    }
+
+    const sal = window.db.config.salPin || PRISMA_CORE.generarSal();
+    window.db.config.salPin = sal;
+    const nuevoHash = PRISMA_CORE.hashPin(nuevoPin, sal);
+
+    const idExcluir = esMaster ? 'master' : usuarioActual.id;
+    if (PRISMA_CORE.pinDuplicado(window.db, nuevoPin, idExcluir)) {
+        return mostrarAlerta("❌ Ese PIN ya está en uso por otro usuario", "error");
+    }
+
+    const btnSubmit = document.getElementById('btnGuardarPin');
+    if (btnSubmit) btnSubmit.disabled = true;
+
+    try {
+        if (esMaster) {
+            window.db.config.masterPinHash = nuevoHash;
+            delete window.db.config.masterPin;
+            PRISMA_CORE.registrarAuditoria(window.db, usuarioActual, 'CAMBIAR PIN', 'config', 'PIN de Gerencia Master actualizado');
+            if (navigator.onLine && window.db.config.seguridadServidorActiva && window.inicializarSeguridadCloud) {
+                try { await window.inicializarSeguridadCloud(sal, nuevoHash); } catch (err) { console.warn(err); }
+            }
+            if (navigator.onLine && window.guardarConfiguracionEnNube) {
+                try { await window.guardarConfiguracionEnNube(); } catch (err) { console.warn(err); }
+            }
+        } else {
+            const emp = window.db.empleados.find(x => x.id === usuarioActual.id);
+            if (!emp) {
+                return mostrarAlerta("❌ No se encontró el registro del empleado", "error");
+            }
+            emp.pinHash = nuevoHash;
+            delete emp.pin;
+            PRISMA_CORE.registrarAuditoria(window.db, usuarioActual, 'CAMBIAR PIN', 'empleados', `${emp.nombre} ${emp.apellido}`);
+            if (navigator.onLine && window.guardarItemEnNube) {
+                try { await window.guardarItemEnNube("empleados", emp); } catch (err) { console.warn(err); }
+            }
+            if (navigator.onLine && window.db.config.seguridadServidorActiva && window.asignarPinSeguro) {
+                try { await window.asignarPinSeguro(emp.id, nuevoPin); } catch (err) { console.warn(err); }
+            }
+        }
+
+        await guardarDB(false);
+        cerrarModalCambiarPin();
+        mostrarAlerta("🔐 PIN actualizado exitosamente");
+    } catch (err) {
+        console.error('Error al guardar nuevo PIN:', err);
+        mostrarAlerta("❌ Error al guardar el PIN: " + (err.message || 'Error desconocido'), "error");
+    } finally {
+        if (btnSubmit) btnSubmit.disabled = false;
+    }
 }
 
 function cambiarSeccion(id) {
@@ -1378,14 +1477,17 @@ async function agregarEmpleado(e) {
     if (rol === 'informatico') return mostrarAlerta("❌ El rol informático es único y ya existe", "error");
     if (!window.db.config.roles[rol] || window.db.config.roles[rol].activo === false) return mostrarAlerta("❌ Rol no válido o desactivado", "error");
     if (pin === '0000' || pin === '6988') return mostrarAlerta("❌ PIN reservado por el sistema", "error");
+    if (!/^\d{4}$/.test(pin)) return mostrarAlerta("❌ El PIN debe tener exactamente 4 dígitos", "error");
     if (PRISMA_CORE.pinDuplicado(window.db, pin)) return mostrarAlerta("❌ PIN en uso", "error");
     if (window.db.empleados.some(x => x.doc === doc)) return mostrarAlerta("❌ Cédula en uso", "error");
     if (!document.getElementById('empSucursal').value) return mostrarAlerta("❌ Seleccione una sucursal", "error");
 
+    const sal = window.db.config.salPin || PRISMA_CORE.generarSal();
+    window.db.config.salPin = sal;
     const nuevo = {
         id: genID(), nombre: document.getElementById('empNombre').value.trim().toUpperCase(), apellido: document.getElementById('empApellido').value.trim().toUpperCase(),
         tipoDoc: 'Cedula', doc, domicilio: document.getElementById('empDomicilio').value.trim().toUpperCase(), idSuc: document.getElementById('empSucursal').value,
-        rol, pin, estado: 'activo', comision: parseFloat(document.getElementById('empComision').value) || 0, ventasTotal: 0, comisionAcumulada: 0, protegido: false, dispositivoId: ''
+        rol, pinHash: PRISMA_CORE.hashPin(pin, sal), estado: 'activo', comision: parseFloat(document.getElementById('empComision').value) || 0, ventasTotal: 0, comisionAcumulada: 0, protegido: false, dispositivoId: ''
     };
     window.db.empleados.push(nuevo);
     PRISMA_CORE.registrarAuditoria(window.db, usuarioActual, 'ALTA EMPLEADO', 'empleados', `${nuevo.nombre} ${nuevo.apellido} (${rol})`);
@@ -2058,7 +2160,7 @@ window.verAlertasStockMinimo = function () {
 
 // ==================== EDITOR UNIVERSAL ====================
 const ETIQUETAS = { nombre: 'Nombre', apellido: 'Apellido', doc: 'Documento', tel: 'Teléfono', dir: 'Dirección', direccion: 'Dirección', ciudad: 'Ciudad', email: 'Email', contacto: 'Contacto', observaciones: 'Observaciones', detalle: 'Detalle', categoria: 'Categoría', unidad: 'Unidad', stockMin: 'Stock mínimo', costo: 'Costo', precio: 'Precio venta', condicion: 'Condición', domicilio: 'Domicilio', comision: 'Comisión %', pin: 'PIN', idSuc: 'Sucursal', rol: 'Rol', tipoDoc: 'Tipo doc.' };
-const OCULTOS = ['id', 'qrCode', 'inventario', 'ventasTotal', 'comisionAcumulada', 'historial', 'deuda', 'estado', 'items', 'protegido', 'fechaAlta', 'activo'];
+const OCULTOS = ['id', 'qrCode', 'inventario', 'ventasTotal', 'comisionAcumulada', 'historial', 'deuda', 'estado', 'items', 'protegido', 'fechaAlta', 'activo', 'pinHash', 'dispositivoId', 'pin'];
 
 window.abrirEditor = function (tabla, id) {
     const item = window.db[tabla].find(x => x.id === id);
@@ -2080,6 +2182,13 @@ window.abrirEditor = function (tabla, id) {
         } else {
             html += `<div class="mb-3"><label class="block text-xs font-semibold text-slate-300 uppercase mb-1">${lbl}</label><input type="${typeof item[key] === 'number' ? 'number' : 'text'}" id="edit_${key}" value="${escapeHTML(item[key])}" class="input-apple"></div>`;
         }
+    }
+    if (tabla === 'empleados') {
+        html += `<div class="mb-3">
+            <label class="block text-xs font-semibold text-slate-300 uppercase mb-1">Cambiar PIN (4 dígitos)</label>
+            <input type="password" id="edit_pin" maxlength="4" pattern="[0-9]{4}" placeholder="•••• (dejar en blanco para mantener)" class="input-apple text-center font-mono tracking-widest bg-slate-950/70">
+            <p class="text-[10px] text-slate-500 mt-1">Ingrese 4 dígitos sólo si desea cambiar el PIN de este empleado</p>
+        </div>`;
     }
     document.getElementById('formEditorUniversal').innerHTML = html;
     document.getElementById('modalEditorUniversal').classList.remove('hidden');
@@ -2105,9 +2214,16 @@ window.guardarEdicion = async function (e) {
         if (c > p) return mostrarAlerta("❌ El costo no puede superar el precio", "error");
     }
     if (tabla === 'empleados') {
-        const docEd = val('doc'), pinEd = val('pin');
+        const docEd = val('doc'), pinEd = (val('pin') || '').trim();
         if (docEd && window.db.empleados.some(x => x.doc === docEd && x.id !== id)) return mostrarAlerta("❌ Cédula en uso", "error");
-        if (pinEd && PRISMA_CORE.pinDuplicado(window.db, pinEd, id)) return mostrarAlerta("❌ PIN en uso", "error");
+        if (pinEd) {
+            if (!/^\d{4}$/.test(pinEd)) return mostrarAlerta("❌ El PIN debe tener 4 dígitos numéricos", "error");
+            if (pinEd === '0000') return mostrarAlerta("❌ El PIN 0000 está reservado para la Gerencia Master", "error");
+            if (pinEd === '6988' && val('rol') !== 'informatico' && original.rol !== 'informatico') {
+                return mostrarAlerta("❌ El PIN 6988 está reservado para el Informático", "error");
+            }
+            if (PRISMA_CORE.pinDuplicado(window.db, pinEd, id)) return mostrarAlerta("❌ PIN en uso", "error");
+        }
         if (PRISMA_CORE.esProtegido(original) && val('rol') !== 'informatico') return mostrarAlerta("🛡️ No se puede quitar el rol informático", "error");
         if (val('rol') && !window.db.config.roles[val('rol')]) return mostrarAlerta("❌ Rol inválido", "error");
     }
@@ -2118,6 +2234,7 @@ window.guardarEdicion = async function (e) {
 
     const SIN_MAYUSCULAS = ['email', 'observaciones', 'detalle', 'pin', 'tel', 'doc', 'contacto'];
     for (let k in original) {
+        if (k === 'pinHash' || k === 'dispositivoId' || k === 'pin') continue;
         const inp = document.getElementById('edit_' + k);
         if (!inp) continue;
         let v = inp.value;
@@ -2126,6 +2243,21 @@ window.guardarEdicion = async function (e) {
         else v = String(v).toUpperCase();
         ref[k] = v;
     }
+
+    if (tabla === 'empleados') {
+        const pinEd = (val('pin') || '').trim();
+        if (pinEd) {
+            const sal = window.db.config.salPin || PRISMA_CORE.generarSal();
+            window.db.config.salPin = sal;
+            ref.pinHash = PRISMA_CORE.hashPin(pinEd, sal);
+            delete ref.pin;
+            PRISMA_CORE.registrarAuditoria(window.db, usuarioActual, 'CAMBIAR PIN EMPLEADO', 'empleados', `${ref.nombre} ${ref.apellido}`);
+            if (navigator.onLine && window.db.config.seguridadServidorActiva && window.asignarPinSeguro) {
+                try { await window.asignarPinSeguro(ref.id, pinEd); } catch (err) { console.warn(err); }
+            }
+        }
+    }
+
     PRISMA_CORE.registrarAuditoria(window.db, usuarioActual, 'EDITAR', tabla, ref.nombre || ref.id);
     await guardarDB();
     if (navigator.onLine && window.guardarItemEnNube) await window.guardarItemEnNube(tabla, ref);
@@ -2406,6 +2538,9 @@ window.chequearLicencia = chequearLicencia;
 window.renderAlertaStockMinimo = renderAlertaStockMinimo;
 window.vaciarCarrito = vaciarCarrito;
 window.renderizarHistorialFacturas = renderizarHistorialFacturas;
+window.abrirModalCambiarPin = abrirModalCambiarPin;
+window.cerrarModalCambiarPin = cerrarModalCambiarPin;
+window.guardarNuevoPin = guardarNuevoPin;
 
 // Inicializar IndexedDB e interfaz al cargar el script
 inicializarPersistencia();

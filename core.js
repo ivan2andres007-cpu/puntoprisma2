@@ -250,7 +250,7 @@ var PRISMA_CORE = (function () {
     function pinDuplicado(db, pin, idExcluir) {
         const sal = db && db.config && db.config.salPin; if (!sal) return false;
         const h = hashPin(pin, sal);
-        if (db.config.masterPinHash && db.config.masterPinHash === h) return true;
+        if (idExcluir !== 'master' && ((db.config.masterPinHash && db.config.masterPinHash === h) || (db.config.masterPin && db.config.masterPin === pin))) return true;
         return (db.empleados || []).some(e => e.id !== idExcluir && ((e.pinHash && e.pinHash === h) || (e.pin && e.pin === pin)));
     }
 
@@ -465,8 +465,8 @@ var PRISMA_CORE = (function () {
     function migrarPinesAHash(db) {
         if (!db.config.salPin) db.config.salPin = generarSal();
         const sal = db.config.salPin;
-        if (db.config.masterPin && !db.config.masterPinHash) { db.config.masterPinHash = hashPin(db.config.masterPin, sal); delete db.config.masterPin; }
-        db.empleados.forEach(e => { if (e.pin && !e.pinHash) { e.pinHash = hashPin(e.pin, sal); delete e.pin; } });
+        if (db.config.masterPin) { db.config.masterPinHash = hashPin(db.config.masterPin, sal); delete db.config.masterPin; }
+        (db.empleados || []).forEach(e => { if (e.pin) { e.pinHash = hashPin(e.pin, sal); delete e.pin; } });
     }
 
     // ==================== SEGURIDAD: FILTRADO DE SECRETOS Y SANEAMIENTO FIRESTORE ====================
