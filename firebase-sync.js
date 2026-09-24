@@ -5,14 +5,14 @@ import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/
 
 // Credenciales y configuración intacta de Firebase
 const firebaseConfig = {
-    apiKey: "AIzaSyDzJf8zZpjKbvmvKIBkUI0eDye1REjuxRw",
-    authDomain: "puntoprisma-4e035.firebaseapp.com",
-    projectId: "puntoprisma-4e035",
-    storageBucket: "puntoprisma-4e035.firebasestorage.app",
-    messagingSenderId: "1058835816345",
-    appId: "1:1058835816345:web:bb804b0eddc03381de3d08"
+    apiKey: "AIzaSyCGMzm-BS9qaMGNtxIoHpfbn-tVEdFqPf4",
+    authDomain: "puntoprisma2.firebaseapp.com",
+    projectId: "puntoprisma2",
+    storageBucket: "puntoprisma2.firebasestorage.app",
+    messagingSenderId: "414639636781",
+    appId: "1:414639636781:web:795ccfd6fef2f51bee13a4",
+    measurementId: "G-PFQVTYPTWR"
 };
-
 const app = initializeApp(firebaseConfig);
 const dbCloud = getFirestore(app);
 const authCloud = getAuth(app);
