@@ -13,4 +13,4 @@ jobs:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
           firebaseServiceAccount: '${{ secrets.FIREBASE_CREDENTIALS }}'
           channelId: live
-          projectId: puntoprisma-4e035
+          projectId: puntoprisma2
